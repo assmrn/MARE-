@@ -6,6 +6,17 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from reasoning.risk import evaluate_detection_severity
 
 app = FastAPI()
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+@app.get("/telemetry")
+async def telemetry():
+    return {
+        "gps": None,
+        "battery": None,
+        "status": "Planned"
+    }
 @app.websocket("/api/ws/detections")
 async def websocket_detections(websocket: WebSocket):
     await websocket.accept()

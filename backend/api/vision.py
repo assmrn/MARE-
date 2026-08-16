@@ -1,21 +1,20 @@
-import json
+# mare-backend/api/vision.py
+import os
 import uuid
 from datetime import datetime
-from typing import Optional
 
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
 
 
-# 1. Define the Structured Output Models (Matches your Step 6 requirements)
 class BoundingBox(BaseModel):
     x: float
     y: float
     w: float
     h: float
 
-class Detection(BaseModel):
+class DetectionResult(BaseModel):
     detection_id: str
     class_name: str
     confidence: float
@@ -23,57 +22,44 @@ class Detection(BaseModel):
     timestamp: str
     camera_id: str
     frame_id: int
-    location_estimate: dict | None = None
+    latitude_estimate: float | None = None
+    longitude_estimate: float | None = None
     mission_context: str
-    severity: str = "Low" # Default, updated by reasoning layer later
+    severity: str = "Low"
 
-# Initialize the Gemini Client
-# It will automatically pick up the GEMINI_API_KEY from your environment variables
-client = genai.Client()
+def analyze_frame(base64_image: str, frame_id: int, mission_context: str) -> list[DetectionResult]:
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key or api_key == "dummy-key-for-import-only":
+        return [] # Fallback handled in WebSocket
 
-async def analyze_frame_with_ai(base64_image: str, frame_id: int, mission_context: str) -> List[Detection]:
-    """
-    Sends a frame to Gemini 1.5 Flash to detect anomalies based on the mission context.
-    """
-    prompt = f"""
-    Analyze this camera frame for a {mission_context} mission.
-    Identify any vessels, debris, heat signatures, or anomalies.
-    For each object, provide:
-    - class_name (e.g., Vessel, Debris, Heat Signature)
-    - confidence (0.0 to 1.0)
-    - bounding_box (x, y, w, h) as percentages of the image (0-100)
-    """
+    client = genai.Client(api_key=api_key)
+    prompt = f"Analyze this camera frame for a {mission_context} mission. Identify vessels, debris, or anomalies. Return bounding boxes (x, y, w, h as percentages 0-100), class_name, and confidence (0.0-1.0)."
     
     try:
-        # We use the structured outputs feature to guarantee perfect JSON!
         response = client.models.generate_content(
             model='gemini-1.5-flash',
             contents=[prompt, {"mime_type": "image/jpeg", "data": base64_image}],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
-                response_schema=list[Detection],
-                temperature=0.2 # Low temperature for more deterministic, factual detections
+                response_schema=list[DetectionResult],
+                temperature=0.2
             ),
         )
-        
-        # Parse the JSON string back into our Python dictionaries
+        import json
         raw_detections = json.loads(response.text)
         
-        detections = []
+        results = []
         for det in raw_detections:
-            # Inject the system-level fields that the AI model shouldn't guess
-            det['detection_id'] = f"det_{uuid.uuid4().hex[:6]}"
-            det['timestamp'] = datetime.utcnow().isoformat() + "Z"  # noqa: DTZ003
-            det['camera_id'] = "cam_front_rgb"
+            det['detection_id'] = f"det_{uuid.uuid4().hex[:8]}"
+            det['timestamp'] = f"{datetime.utcnow().isoformat()}Z"  # noqa: DTZ003
+            det['camera_id'] = "cam_main"
             det['frame_id'] = frame_id
             det['mission_context'] = mission_context
-            det['location_estimate'] = None # Enforcing the geographical limitation constraint
-            
-            # Validate and append
-            detections.append(Detection(**det))
-            
-        return detections
-        
-    except (json.JSONDecodeError, ValueError, KeyError) as e:
-        print(f"AI Vision Error: {e}")
+            # Enforcing Step 6 Rule: Do not invent coordinates
+            det['latitude_estimate'] = None 
+            det['longitude_estimate'] = None
+            results.append(DetectionResult(**det))
+        return results
+    except (ValueError, KeyError, AttributeError) as e:
+        print(f"Vision API Error: {e}")
         return []

@@ -7,8 +7,8 @@ from fastapi import WebSocket, WebSocketDisconnect
 from reasoning.risk import evaluate_detection_severity
 from streamlit import App
 
-
-@App.websocket("/api/ws/detections")
+app = App()
+@app.websocket("/api/ws/detections")
 async def websocket_detections(websocket: WebSocket):
     await websocket.accept()
     frame_id = 0

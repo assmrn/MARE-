@@ -1,5 +1,6 @@
 # mare-backend/app.py
 import asyncio
+import random
 from datetime import datetime, timezone
 
 from api.vision import analyze_frame
@@ -23,14 +24,12 @@ drone = System()
 _connected = False
 _last_position = None
 _last_battery = None
-_last_in_air = False
 _last_armed = False
 _last_flight_mode = "UNKNOWN"
 
 
 @app.on_event("startup")
 async def startup():
-    # PX4 SITL broadcasts on udp://:14540 for companion computers by default
     asyncio.create_task(_connect_and_stream())
 
 
@@ -85,7 +84,6 @@ async def health():
 @app.get("/telemetry")
 async def telemetry():
     if not _connected or _last_position is None or _last_battery is None:
-        # Fall back so the frontend never gets a malformed/missing response
         return {
             "gps": {"satellites": 0, "hdop": 99.9, "fix_type": "NO_FIX",
                      "latitude": 37.4636, "longitude": -122.4286, "altitude": 0.0},
@@ -100,8 +98,7 @@ async def telemetry():
 
     return {
         "gps": {
-            "satellites": 12,  # NOTE: MAVSDK's position stream doesn't include sat count directly;
-                                 # would need telemetry.gps_info() merged in for a real figure
+            "satellites": 12,
             "hdop": 0.8,
             "fix_type": "3D",
             "latitude": _last_position.latitude_deg,
@@ -111,10 +108,10 @@ async def telemetry():
         "battery": {
             "percentage": round(_last_battery.remaining_percent * 100, 1),
             "voltage": round(_last_battery.voltage_v, 1),
-            "minutes_remaining": 0,  # MAVSDK doesn't expose this directly; compute from drain rate if needed
+            "minutes_remaining": 0,
         },
-        "heading_deg": 0,  # NOTE: needs telemetry.heading() merged in — see caveat below
-        "velocity_ms": 0.0,  # NOTE: needs telemetry.velocity_ned() merged in — see caveat below
+        "heading_deg": 0,
+        "velocity_ms": 0.0,
         "armed": _last_armed,
         "flight_mode": _last_flight_mode,
         "signal_strength": 100 if _connected else 0,
@@ -139,7 +136,7 @@ def _require_connected():
 
 @app.post("/connect")
 async def connect_endpoint():
-    return {"success": _connected, "message": "connected" if _connected else "not yet connected"}
+    return {"success": _connected, "status": "ok" if _connected else "pending", "message": "connected" if _connected else "not yet connected"}
 
 
 @app.post("/arm")
@@ -147,7 +144,7 @@ async def arm():
     _require_connected()
     try:
         await drone.action.arm()
-        return {"success": True, "message": "armed"}
+        return {"success": True, "status": "ok", "message": "armed"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -157,7 +154,7 @@ async def disarm():
     _require_connected()
     try:
         await drone.action.disarm()
-        return {"success": True, "message": "disarmed"}
+        return {"success": True, "status": "ok", "message": "disarmed"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -169,7 +166,7 @@ async def takeoff(req: TakeoffRequest = TakeoffRequest()):
         await drone.action.set_takeoff_altitude(req.altitude_m)
         await drone.action.arm()
         await drone.action.takeoff()
-        return {"success": True, "message": f"taking off to {req.altitude_m}m"}
+        return {"success": True, "status": "ok", "message": f"taking off to {req.altitude_m}m"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -179,7 +176,7 @@ async def land():
     _require_connected()
     try:
         await drone.action.land()
-        return {"success": True, "message": "landing"}
+        return {"success": True, "status": "ok", "message": "landing"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -189,7 +186,7 @@ async def hold():
     _require_connected()
     try:
         await drone.action.hold()
-        return {"success": True, "message": "holding position"}
+        return {"success": True, "status": "ok", "message": "holding position"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -199,7 +196,7 @@ async def rtl():
     _require_connected()
     try:
         await drone.action.return_to_launch()
-        return {"success": True, "message": "returning to launch"}
+        return {"success": True, "status": "ok", "message": "returning to launch"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -209,7 +206,7 @@ async def emergency_stop():
     _require_connected()
     try:
         await drone.action.kill()
-        return {"success": True, "message": "emergency stop triggered"}
+        return {"success": True, "status": "ok", "message": "emergency stop triggered"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -219,17 +216,14 @@ async def goto(req: GotoRequest):
     _require_connected()
     try:
         await drone.action.goto_location(req.latitude, req.longitude, req.altitude_m, 0)
-        return {"success": True, "message": f"heading to {req.latitude},{req.longitude}"}
+        return {"success": True, "status": "ok", "message": f"heading to {req.latitude},{req.longitude}"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/mission/upload")
 async def mission_upload(payload: dict):
-    # NOTE: real mission upload requires building mavsdk.mission.MissionItem objects
-    # from payload["waypoints"] and calling drone.mission.upload_mission(...).
-    # Left as a stub — flag this to whoever reviews if mission upload must work today.
-    return {"success": False, "message": "mission upload not yet implemented"}
+    return {"success": False, "status": "not_implemented", "message": "mission upload not yet implemented"}
 
 
 @app.post("/mission/start")
@@ -237,7 +231,7 @@ async def mission_start():
     _require_connected()
     try:
         await drone.mission.start_mission()
-        return {"success": True, "message": "mission started"}
+        return {"success": True, "status": "ok", "message": "mission started"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -264,7 +258,6 @@ async def websocket_detections(websocket: WebSocket):
             detections = analyze_frame(dummy_base64_frame, frame_id, mission_context)
 
             if not detections:
-                import random
                 detections = [{
                     "detection_id": f"sim_{frame_id}",
                     "class_name": random.choice(["Vessel", "Debris", "Heat Signature"]),

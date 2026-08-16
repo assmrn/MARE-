@@ -1,4 +1,4 @@
-# mare-backend/app.py
+
 import asyncio
 import random
 from datetime import datetime, timezone
@@ -12,7 +12,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten to your dashboard's exact origin in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -21,26 +21,15 @@ app.add_middleware(
 
 @app.get("/health")
 async def health():
-    """
-    Connection truth lives here (not on /telemetry, which always answers
-    even when PX4 is disconnected via mock fallback).
-    """
     return {
         "status": "ok",
-        "px4_connected": False,   # flip to True once the real PX4 bridge is wired in
-        "mode": "simulation",     # "live" | "simulation"
+        "px4_connected": False,
+        "mode": "simulation",
     }
 
 
 @app.get("/telemetry")
 async def telemetry():
-    """
-    Shape matches what MissionMap / Topbar / useLiveTelemetry expect:
-    - telemetry.gps.satellites, .latitude, .longitude, .altitude
-    - telemetry.battery.percentage
-    - telemetry.heading_deg (top-level, NOT under gps)
-    - telemetry.velocity_ms (top-level, NOT ground_speed)
-    """
     return {
         "gps": {
             "satellites": random.randint(8, 16),
@@ -48,5 +37,61 @@ async def telemetry():
             "fix_type": "3D",
             "latitude": 37.4636,
             "longitude": -122.4286,
-        }
+            "altitude": round(random.uniform(120, 140), 1),
+        },
+        "battery": {
+            "percentage": round(random.uniform(60, 85), 1),
+            "voltage": round(random.uniform(20.5, 22.5), 1),
+            "minutes_remaining": random.randint(20, 35),
+        },
+        "heading_deg": random.randint(0, 359),
+        "velocity_ms": round(random.uniform(8, 12), 1),
+        "armed": True,
+        "flight_mode": "AUTO",
+        "signal_strength": random.randint(75, 95),
+        "mission_progress": random.randint(0, 100),
     }
+
+
+@app.websocket("/api/ws/detections")
+async def websocket_detections(websocket: WebSocket):
+    await websocket.accept()
+    frame_id = 0
+    mission_context = "Coastal Survey"
+
+    try:
+        while True:
+            dummy_base64_frame = ""
+
+            detections = analyze_frame(dummy_base64_frame, frame_id, mission_context)
+
+            if not detections:
+                detections = [{
+                    "detection_id": f"sim_{frame_id}",
+                    "class_name": random.choice(["Vessel", "Debris", "Heat Signature"]),
+                    "confidence": round(random.uniform(0.70, 0.98), 2),
+                    "bounding_box": {"x": random.randint(10, 80), "y": random.randint(10, 80), "w": 15, "h": 15},
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "camera_id": "cam_main",
+                    "frame_id": frame_id,
+                    "latitude_estimate": None,
+                    "longitude_estimate": None,
+                    "mission_context": mission_context,
+                    "severity": "Low"
+                }]
+
+            processed_payload = []
+            for det in detections:
+                if isinstance(det, dict):
+                    det["severity"] = evaluate_detection_severity(det["class_name"], det["confidence"], mission_context)
+                    processed_payload.append(det)
+                else:
+                    det.severity = evaluate_detection_severity(det.class_name, det.confidence, mission_context)
+                    processed_payload.append(det.model_dump())
+
+            await websocket.send_json(processed_payload)
+            frame_id += 1
+            await asyncio.sleep(1.0)
+
+    except WebSocketDisconnect:
+        pass

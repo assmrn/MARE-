@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { toast } from "sonner";
 import { Trash2, UploadCloud, XCircle, MapPin, Flag, CircleDot } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -23,25 +22,26 @@ export default function MissionPlannerPage() {
   const setPlanningMode = useMissionStore((s) => s.setPlanningMode);
   const removePoint = useMissionStore((s) => s.removePoint);
   const clearMission = useMissionStore((s) => s.clearMission);
-  const uploadAndStart = useMissionStore((s) => s.uploadAndStart);
-  const [uploading, setUploading] = useState(false);
+  const [uploading] = useState(false);
 
   const origin = points.find((p) => p.kind === "origin");
   const destination = points.find((p) => p.kind === "destination");
   const canUpload = Boolean(origin && destination) && status !== "UPLOADING";
 
   const handleUpload = async () => {
-    setUploading(true);
-    await uploadAndStart();
-    setUploading(false);
-    const latest = useMissionStore.getState();
-    if (latest.status === "FAILED") {
-      toast.error("Mission upload didn't complete", { description: latest.uploadError ?? undefined });
-    } else {
-      toast.success("Mission uploaded and started");
-    }
-  };
-
+  if (points.length === 0) return alert("Please click the map to add waypoints first!");
+  
+  try {
+    await fetch("http://localhost:8000/api/mission/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ waypoints: points }), // Passing the dynamic state here!
+    });
+    // Add success notification or state update here
+  } catch (error) {
+    console.error("Failed to upload mission:", error);
+  }
+};
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">

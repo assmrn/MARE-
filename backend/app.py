@@ -4,10 +4,10 @@ import random
 from datetime import datetime, timezone
 
 from api.vision import analyze_frame
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from mavsdk import System
+from pydantic import BaseModel
 from reasoning.risk import evaluate_detection_severity
 
 app = FastAPI()
@@ -81,6 +81,26 @@ async def health():
     }
 
 
+import time
+
+# Simulated flight path: Half Moon Bay -> inland point (matches your screenshot)
+_ORIGIN = (37.4636, -122.4286)
+_DESTINATION = (37.4720, -122.4100)
+_FLIGHT_DURATION_SEC = 60  # time to travel from origin to destination, then loop back
+_start_time = time.time()
+
+
+def _interpolated_position():
+    elapsed = (time.time() - _start_time) % (_FLIGHT_DURATION_SEC * 2)
+    if elapsed <= _FLIGHT_DURATION_SEC:
+        t = elapsed / _FLIGHT_DURATION_SEC  # 0 -> 1, going to destination
+    else:
+        t = 1 - (elapsed - _FLIGHT_DURATION_SEC) / _FLIGHT_DURATION_SEC  # 1 -> 0, returning
+
+    lat = _ORIGIN[0] + (_DESTINATION[0] - _ORIGIN[0]) * t
+    lng = _ORIGIN[1] + (_DESTINATION[1] - _ORIGIN[1]) * t
+    return lat, lng, t
+
 @app.get("/telemetry")
 async def telemetry():
     if not _connected or _last_position is None or _last_battery is None:
@@ -117,7 +137,6 @@ async def telemetry():
         "signal_strength": 100 if _connected else 0,
         "mission_progress": 0,
     }
-
 
 class GotoRequest(BaseModel):
     latitude: float

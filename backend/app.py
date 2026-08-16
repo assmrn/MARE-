@@ -1,13 +1,11 @@
-# mare-backend/app.py (Add this to your existing FastAPI app)
 import asyncio
 import random
 
 from api.vision import analyze_frame
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from reasoning.risk import evaluate_detection_severity
-from streamlit import App
 
-app = App()
+app = FastAPI()
 @app.websocket("/api/ws/detections")
 async def websocket_detections(websocket: WebSocket):
     await websocket.accept()

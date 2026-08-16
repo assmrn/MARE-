@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="MARE — Mission Anomaly Reasoning Engine. Autonomous drone mission control and AI diagnostics platform." />
+    <title>MARE · Mission Anomaly Reasoning Engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      // Apply theme before paint to avoid flash-of-wrong-theme.
+      (function () {
+        try {
+          var stored = localStorage.getItem("mare-theme") || "system";
+          var isDark =
+            stored === "dark" ||
+            (stored === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", isDark);
+        } catch (e) {}
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-CuwJMZFV.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-C3SkxDvy.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

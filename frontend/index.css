@@ -1,0 +1,157 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.875rem;
+
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+
+    --surface: 0 0% 100%;
+    --surface-raised: 210 40% 98%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --border: 214 32% 89%;
+    --input: 214 32% 89%;
+    --ring: 221 83% 53%;
+
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+    --primary-muted: 214 95% 93%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 33% 95%;
+    --muted-foreground: 215 16% 43%;
+
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+
+    --success: 160 84% 32%;
+    --success-foreground: 0 0% 100%;
+    --success-muted: 152 60% 93%;
+
+    --warning: 32 92% 42%;
+    --warning-foreground: 0 0% 100%;
+    --warning-muted: 48 96% 89%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-muted: 0 93% 95%;
+  }
+
+  .dark {
+    --background: 222 47% 10%;
+    --foreground: 210 40% 96%;
+
+    --surface: 221 39% 11%;
+    --surface-raised: 215 28% 17%;
+
+    --card: 217 33% 15%;
+    --card-foreground: 210 40% 96%;
+
+    --popover: 217 33% 15%;
+    --popover-foreground: 210 40% 96%;
+
+    --border: 217 24% 22%;
+    --input: 217 24% 22%;
+    --ring: 221 83% 63%;
+
+    --primary: 221 83% 63%;
+    --primary-foreground: 222 47% 10%;
+    --primary-muted: 221 39% 20%;
+
+    --secondary: 215 25% 18%;
+    --secondary-foreground: 210 40% 96%;
+
+    --muted: 215 25% 17%;
+    --muted-foreground: 217 15% 63%;
+
+    --accent: 215 25% 18%;
+    --accent-foreground: 210 40% 96%;
+
+    --success: 160 64% 48%;
+    --success-foreground: 222 47% 10%;
+    --success-muted: 160 40% 16%;
+
+    --warning: 38 92% 58%;
+    --warning-foreground: 26 83% 10%;
+    --warning-muted: 38 50% 16%;
+
+    --destructive: 0 79% 63%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-muted: 0 45% 18%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  ::selection {
+    @apply bg-primary/20;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/40;
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  .mono {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.leaflet-container {
+  background: hsl(var(--surface));
+  font-family: inherit;
+}

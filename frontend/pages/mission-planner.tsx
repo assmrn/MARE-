@@ -1,176 +1,97 @@
-import { useState } from "react";
-import { Trash2, UploadCloud, XCircle, MapPin, Flag, CircleDot } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import { Radio, Satellite, FlaskConical, Clock, AlertTriangle, MapPinOff, Bot } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { MissionMap } from "@/components/map/mission-map";
-import { MissionStatusBar } from "@/components/mission/mission-status-bar";
+import { useLiveTelemetry } from "@/hooks/useMissionData";
 import { useMissionStore } from "@/store/missionStore";
 import { cn } from "@/lib/utils";
-import type { PlanningMode } from "@/types/mission";
+import type { MissionSyncStatus } from "@/types/mission";
 
-const MODE_BUTTONS: { mode: PlanningMode; label: string; icon: typeof MapPin }[] = [
-  { mode: "origin", label: "Set Origin", icon: CircleDot },
-  { mode: "waypoint", label: "Add Waypoint", icon: MapPin },
-  { mode: "destination", label: "Set Destination", icon: Flag },
-];
-
-export default function MissionPlannerPage() {
-  const points = useMissionStore((s) => s.points);
-  const status = useMissionStore((s) => s.status);
-  const planningMode = useMissionStore((s) => s.planningMode);
-  const setPlanningMode = useMissionStore((s) => s.setPlanningMode);
-  const removePoint = useMissionStore((s) => s.removePoint);
-  const clearMission = useMissionStore((s) => s.clearMission);
-  const [uploading] = useState(false);
-
-  const origin = points.find((p) => p.kind === "origin");
-  const destination = points.find((p) => p.kind === "destination");
-  const canUpload = Boolean(origin && destination) && status !== "UPLOADING";
-
-  const handleUpload = async () => {
-  if (points.length === 0) return alert("Please click the map to add waypoints first!");
-  
-  try {
-    await fetch("http://localhost:8000/api/mission/upload", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ waypoints: points }), // Passing the dynamic state here!
-    });
-    // Add success notification or state update here
-  } catch (error) {
-    console.error("Failed to upload mission:", error);
-  }
+const STATUS_STYLES: Record<MissionSyncStatus, { variant: "default" | "primary" | "success" | "warning" | "destructive" | "outline"; label: string }> = {
+  PLANNED: { variant: "outline", label: "Mission Planned" },
+  UPLOADING: { variant: "primary", label: "Uploading…" },
+  UPLOADED: { variant: "primary", label: "Mission Uploaded" },
+  EXECUTING: { variant: "success", label: "Vehicle Executing" },
+  PAUSED: { variant: "warning", label: "Mission Paused" },
+  COMPLETED: { variant: "success", label: "Mission Completed" },
+  FAILED: { variant: "destructive", label: "Mission Failed" },
+  CANCELLED: { variant: "outline", label: "Mission Cancelled" },
 };
+
+export function MissionStatusBar() {
+  // 1. Extract 'telemetry' from the hook to access GPS data
+  const { telemetry, connected, mode, backendError, isStale, lastUpdatedAt } = useLiveTelemetry();
+  const status = useMissionStore((s) => s.status);
+  const uploadError = useMissionStore((s) => s.uploadError);
+  const statusStyle = STATUS_STYLES[status];
+
+  // 2. State for Simulated AI detection
+  const [isSimulatedAI, setIsSimulatedAI] = useState(false);
+
+  // 3. Listen to the Detections WS to see if the backend is sending mock data
+  useEffect(() => {
+    const ws = new WebSocket("ws://localhost:8000/api/ws/detections");
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        // Backend mock detections are prefixed with 'sim_'
+        setIsSimulatedAI(data.some((d: any) => d.detection_id?.startsWith("sim_")));
+      } catch (e) {
+        // Ignore parse errors silently
+      }
+    };
+    return () => ws.close();
+  }, []);
+
+  const secondsSinceUpdate = lastUpdatedAt ? Math.round((Date.now() - lastUpdatedAt) / 1000) : null;
+  
+  // 4. Check if GPS is unavailable (satellites drop to 0)
+  const isGpsUnavailable = telemetry?.gps?.satellites === 0;
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight">Mission Planner</h1>
-          <p className="text-xs text-muted-foreground">Design a mission, then upload it to PX4 via the MARE backend</p>
-        </div>
-        <div className="flex items-center gap-1.5">
-          {MODE_BUTTONS.map(({ mode, label, icon: Icon }) => (
-            <Button
-              key={mode}
-              size="sm"
-              variant={planningMode === mode ? "default" : "outline"}
-              className="gap-1.5"
-              onClick={() => setPlanningMode(planningMode === mode ? "none" : mode)}
-            >
-              <Icon className="size-3.5" />
-              {label}
-            </Button>
-          ))}
-        </div>
-      </div>
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2">
+      <Badge variant={backendError ? "destructive" : connected ? "success" : "destructive"} dot className="gap-1">
+        <Radio className="size-3" />
+        {backendError ? "Backend Unreachable" : connected ? "PX4 Connected" : "PX4 Offline"}
+      </Badge>
 
-      <MissionStatusBar />
+      <Badge variant={mode === "live" ? "success" : mode === "simulation" ? "outline" : "outline"} className="gap-1">
+        {mode === "live" ? <Satellite className="size-3" /> : <FlaskConical className="size-3" />}
+        {mode === "live" ? "Live Telemetry" : mode === "simulation" ? "Simulation Mode" : "Mode Unknown"}
+      </Badge>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <div className="xl:col-span-2">
-          <MissionMap />
-        </div>
+      <Badge variant={statusStyle.variant} dot>
+        {statusStyle.label}
+      </Badge>
 
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>Mission Plan</CardTitle>
-              <CardDescription>
-                {points.length === 0
-                  ? "Click a mode above, then click the map to place points"
-                  : `${points.length} point${points.length === 1 ? "" : "s"} planned`}
-              </CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {points.length === 0 && (
-              <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
-                No mission points yet. A mission needs at least an origin and a destination before it can be uploaded.
-              </div>
-            )}
+      {/* --- STEP 7 NEW BADGES BELOW --- */}
 
-            {origin && (
-              <PlanPointRow
-                label="Origin"
-                point={origin}
-                badgeVariant="success"
-                onRemove={() => removePoint(origin.id)}
-              />
-            )}
-            {points
-              .filter((p) => p.kind === "waypoint")
-              .map((wp, i) => (
-                <PlanPointRow
-                  key={wp.id}
-                  label={`Waypoint ${i + 1}`}
-                  point={wp}
-                  badgeVariant="primary"
-                  onRemove={() => removePoint(wp.id)}
-                />
-              ))}
-            {destination && (
-              <PlanPointRow
-                label="Destination"
-                point={destination}
-                badgeVariant="destructive"
-                onRemove={() => removePoint(destination.id)}
-              />
-            )}
+      {isStale && !backendError && (
+        <Badge variant="warning" className="gap-1">
+          <Clock className="size-3" />
+          Stale{secondsSinceUpdate !== null ? ` · ${secondsSinceUpdate}s` : ""}
+        </Badge>
+      )}
 
-            {points.length > 0 && (
-              <div className="flex gap-2 pt-2">
-                <Button variant="outline" size="sm" className="flex-1 gap-1.5" onClick={clearMission}>
-                  <XCircle className="size-3.5" />
-                  Clear
-                </Button>
-                <Button size="sm" className="flex-1 gap-1.5" disabled={!canUpload || uploading} onClick={handleUpload}>
-                  <UploadCloud className="size-3.5" />
-                  {uploading || status === "UPLOADING" ? "Uploading…" : "Upload & Start"}
-                </Button>
-              </div>
-            )}
-            {!origin || !destination ? (
-              points.length > 0 && (
-                <p className="pt-1 text-center text-[11px] text-muted-foreground">
-                  A mission needs both an origin and a destination to upload.
-                </p>
-              )
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
+      {isGpsUnavailable && connected && (
+        <Badge variant="warning" className="gap-1 bg-amber-500 text-black hover:bg-amber-600">
+          <MapPinOff className="size-3" />
+          GPS Unavailable
+        </Badge>
+      )}
 
-function PlanPointRow({
-  label,
-  point,
-  badgeVariant,
-  onRemove,
-}: {
-  label: string;
-  point: { lat: number; lng: number; alt: number; speed: number };
-  badgeVariant: "success" | "primary" | "destructive";
-  onRemove: () => void;
-}) {
-  return (
-    <div className={cn("flex items-center gap-2.5 rounded-lg border p-2.5 transition-colors border-border")}>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <p className="truncate text-xs font-medium">{label}</p>
-          <Badge variant={badgeVariant} className="shrink-0">
-            {point.alt}m &middot; {point.speed}m/s
-          </Badge>
-        </div>
-        <p className="mt-0.5 text-[10.5px] text-muted-foreground">
-          {point.lat.toFixed(5)}, {point.lng.toFixed(5)}
-        </p>
-      </div>
-      <Button variant="ghost" size="icon" className="size-7 shrink-0 text-muted-foreground hover:text-destructive" aria-label={`Remove ${label}`} onClick={onRemove}>
-        <Trash2 className="size-3.5" />
-      </Button>
+      {isSimulatedAI && (
+        <Badge className="gap-1 bg-purple-500 text-white hover:bg-purple-600">
+          <Bot className="size-3" />
+          Simulated AI Active
+        </Badge>
+      )}
+
+      {uploadError && (
+        <span className={cn("flex items-center gap-1 text-[11px] text-destructive")}>
+          <AlertTriangle className="size-3 shrink-0" />
+          {uploadError}
+        </span>
+      )}
     </div>
   );
 }
